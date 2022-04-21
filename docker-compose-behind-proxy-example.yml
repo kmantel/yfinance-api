@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  yfi_api:
+    build: ./
+    restart: unless-stopped
+    environment:
+      - YFI_API_KEY=changeme
+      - VIRTUAL_HOST=stock.example.com
+      - VIRTUAL_PROTO=http
+      - VIRTUAL_PORT=8080
+      - LETSENCRYPT_HOST=stock.example.com
+      - LETSENCRYPT_EMAIL=admin@example.com
+    networks:
+      - docker_proxy-tier
+networks:
+  docker_proxy-tier:
+    external: true
