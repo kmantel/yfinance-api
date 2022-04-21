@@ -1,0 +1,5 @@
+fastapi
+fastapi-cache2
+starlette
+uvicorn
+yfinance

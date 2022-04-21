@@ -1,0 +1,7 @@
+version: '3.8'
+services:
+  yfi_api:
+    build: ./
+    restart: unless-stopped
+    environment:
+      - YFI_API_KEY=changeme
