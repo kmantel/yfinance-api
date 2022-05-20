@@ -1,5 +1,7 @@
 import argparse
+import datetime
 import os
+import re
 
 import uvicorn
 import yfinance
@@ -28,6 +30,44 @@ yfi_app = FastAPI()
 api_key_query = APIKeyQuery(name="token")
 
 
+option_ticker_regex = re.compile(r'\.?([A-Za-z]+)(\d+)([CcPp])(\d+)')
+option_chain_index = {
+    'C': 0,
+    'P': 1
+}
+
+yfi_tickers = {}
+
+
+def parse_option_ticker(ticker: str):
+    """Parses **ticker** into options info if applicable
+
+    Args:
+        ticker (str)
+
+    Returns:
+        - (underlying asset ticker, expiration date, C/P, strike price)
+        if **ticker** is an option
+        - None if not
+    """
+    try:
+        ticker, option_expiration, option_type, strike = option_ticker_regex.match(ticker).groups()
+    except AttributeError:
+        return None
+    else:
+        date_fmts = ['%y%m%d', '%Y%m%d']
+        for fmt in date_fmts:
+            try:
+                option_expiration = datetime.datetime.strptime(option_expiration, fmt)
+                break
+            except (AttributeError, ValueError):
+                pass
+        else:
+            return {'error': 'Invalid expiration date'}
+
+        return ticker, option_expiration, option_type, strike
+
+
 async def get_api_key(api_key_header: str = Security(api_key_query)):
     if api_key_header not in set(
         [k for k in os.environ[API_KEY_ENV_VAR].split(":") if len(k) > 0]
@@ -38,11 +78,33 @@ async def get_api_key(api_key_header: str = Security(api_key_query)):
         )
 
 
+@cache(expire=args.cache_ttl)
+async def _update_yfinance_object(ticker: str):
+    yfi_tickers[ticker] = yfinance.Ticker(ticker)
+
+
 @yfi_app.get("/quote/{ticker}", dependencies=[Security(get_api_key)])
 @cache(expire=args.cache_ttl)
 async def quote(ticker: str):
-    yfi_obj = yfinance.Ticker(ticker)
-    return yfi_obj.info["regularMarketPrice"]
+    try:
+        ticker, option_expiration, option_type, strike = parse_option_ticker(ticker)
+    except TypeError:
+        # is standard stock
+        await _update_yfinance_object(ticker)
+        return yfi_tickers[ticker].info["regularMarketPrice"]
+    else:
+        option_code = f'{ticker}{option_expiration.strftime("%y%m%d")}{option_type.upper()}{strike}'
+
+        await _update_yfinance_object(ticker)
+        try:
+            chain = yfi_tickers[ticker].option_chain(option_expiration.strftime('%Y-%m-%d'))[option_chain_index[option_type]]
+        except ValueError as e:
+            return {'error': str(e)}
+        try:
+            return chain.loc[chain['contractSymbol'] == option_code]['lastPrice'].iloc[0]
+        except IndexError:
+            return {'error': 'Option does not exist'}
+
 
 
 @yfi_app.on_event("startup")
