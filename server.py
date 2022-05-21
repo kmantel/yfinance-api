@@ -106,6 +106,17 @@ async def quote(ticker: str):
             return {'error': 'Option does not exist'}
 
 
+@yfi_app.get("/info/{ticker}", dependencies=[Security(get_api_key)])
+@cache(expire=args.cache_ttl)
+async def info(ticker: str):
+    try:
+        ticker, _, _, _ = parse_option_ticker(ticker)
+    except TypeError:
+        pass
+
+    await _update_yfinance_object(ticker)
+    return yfi_tickers[ticker].info
+
 
 @yfi_app.on_event("startup")
 async def startup():
