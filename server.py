@@ -52,6 +52,16 @@ async def quote(ticker: str):
     return _get_ticker_price(yfi_obj)
 
 
+@yfi_app.get("/quotes/{tickers}", dependencies=[Security(get_api_key)])
+@cache(expire=args.cache_ttl)
+async def quotes(tickers: str):
+    yfi_obj = yfinance.Tickers(tickers.split(','))
+    return {
+        symbol: _get_ticker_price(ticker)
+        for symbol, ticker in yfi_obj.tickers.items()
+    }
+
+
 @yfi_app.on_event("startup")
 async def startup():
     FastAPICache.init(InMemoryBackend())
