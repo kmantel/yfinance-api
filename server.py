@@ -38,11 +38,18 @@ async def get_api_key(api_key_header: str = Security(api_key_query)):
         )
 
 
+def _get_ticker_price(ticker: yfinance.Ticker):
+    try:
+        return round(ticker.basic_info['lastPrice'], ndigits=2)
+    except (KeyError, TypeError):
+        return None
+
+
 @yfi_app.get("/quote/{ticker}", dependencies=[Security(get_api_key)])
 @cache(expire=args.cache_ttl)
 async def quote(ticker: str):
     yfi_obj = yfinance.Ticker(ticker)
-    return yfi_obj.info["regularMarketPrice"]
+    return _get_ticker_price(yfi_obj)
 
 
 @yfi_app.on_event("startup")
